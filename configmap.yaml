@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sellerportal-consignment-config
+data:
+  APP_ENV: base                       # overridden in overlays
+  LOG_LEVEL: info

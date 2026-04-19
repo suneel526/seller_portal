@@ -1,0 +1,9 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sellerportal-consignment
+  annotations:
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:902309182575:certificate/DEV-CERT-ARN
+spec:
+  rules:
+    - host: sellerportal-consignment.dev.tcgplayer.com
