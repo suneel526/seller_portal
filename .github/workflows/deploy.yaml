@@ -60,14 +60,4 @@ jobs:
             --distribution-id ${{ secrets[format('CF_DIST_{0}', env.ENV_KEY)] }} \
             --paths "/*"
 
-      - name: Notify Slack
-        if: always()
-        uses: slackapi/slack-github-action@v1
-        with:
-          payload: |
-            {
-              "text": "${{ job.status == 'success' && '✅' || '❌' }} S3 deploy *sellerportal-consignment* [${{ inputs.environment }}] ${{ job.status }}"
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+      
