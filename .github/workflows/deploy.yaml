@@ -1,0 +1,73 @@
+name: Deploy to S3/CloudFront
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options: [dev, qa, staging, production]
+
+jobs:
+  deploy:
+    name: Deploy → ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Build
+        run: npm run build -- --mode ${{ inputs.environment }}
+        env:
+          VITE_ENVIRONMENT: ${{ inputs.environment }}
+          FONTAWESOME_AUTHTOKEN: ${{ secrets.FONTAWESOME_AUTHTOKEN }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ inputs.environment == 'dev' && secrets.AWS_ROLE_ARN_DEV || inputs.environment == 'qa' && secrets.AWS_ROLE_ARN_QA || inputs.environment == 'staging' && secrets.AWS_ROLE_ARN_STG || secrets.AWS_ROLE_ARN_PRD }}
+          aws-region: us-east-1
+
+      - name: Sync to S3
+        run: |
+          ENV_KEY=${{ inputs.environment == 'staging' && 'stg' || inputs.environment == 'production' && 'prd' || inputs.environment }}
+          aws s3 sync dist/ s3://${{ secrets[format('S3_BUCKET_{0}', env.ENV_KEY)] }} \
+            --delete --cache-control "max-age=31536000,immutable" \
+            --exclude "index.html"
+          aws s3 cp dist/index.html \
+            s3://${{ secrets[format('S3_BUCKET_{0}', env.ENV_KEY)] }}/index.html \
+            --cache-control "no-store"
+
+      - name: Invalidate CloudFront
+        run: |
+          ENV_KEY=${{ inputs.environment == 'staging' && 'stg' || inputs.environment == 'production' && 'prd' || inputs.environment }}
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets[format('CF_DIST_{0}', env.ENV_KEY)] }} \
+            --paths "/*"
+
+      - name: Notify Slack
+        if: always()
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "${{ job.status == 'success' && '✅' || '❌' }} S3 deploy *sellerportal-consignment* [${{ inputs.environment }}] ${{ job.status }}"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
